@@ -1,0 +1,82 @@
+import time
+import os
+import os.path
+import requests
+import re
+from bs4 import BeautifulSoup
+
+
+def create_html_fail():
+    """ Скачивание html страницы """
+    n = 1
+    file_articles = "articles.txt"
+    if os.path.isfile(file_articles):
+        os.remove("articles.txt")
+    while True:
+        url = f'https://www.theguardian.com/world?page={n}'
+        html = requests.get(url)
+        with open("guardian.html", 'wb') as file:
+            file.write(html.content)
+        if search_articles_titles():
+            n = n + 1
+        else:
+            break
+
+
+def search_articles_titles():
+    """ Поиск статей с помощью BeautifulSoup """
+    date = time.strftime('%d-%B-%Y').lower()
+    with open("guardian.html", 'r', encoding='utf-8') as file:
+        soup = BeautifulSoup(file.read(), 'html.parser')
+        section = soup.select('body')[0].find(id=date)
+        if section is not None:
+            articles = soup.select('body')[0].find_all(id=date)[0].select('li')
+            for article in articles:
+                news = article.find(attrs={'data-link-name': re.compile("^news")})
+                if news is not None:
+                    # text = article.find('a').find('span').text.strip()
+                    text = translate_func(article.find('a').find('span').text.strip())
+                    # text = translate_func(article.find('a').text.strip())
+                    url = article.find('a')['href']
+                    with open("articles.txt", 'a', encoding='utf-8') as file_articles:
+                        file_articles.write(f"{text}\n")
+                        file_articles.write(f"{url}\n\n")
+            else:
+                return True
+        else:
+            return False
+
+
+def translate_func(message):
+    """ Переводчик """
+
+    IAM_TOKEN = ''
+    folder_id = ''
+    target_language = 'ru'
+    text = message
+
+    body = {
+        "targetLanguageCode": target_language,
+        "texts": text,
+        "folderId": folder_id,
+    }
+
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer {0}".format(IAM_TOKEN)
+    }
+
+    response = requests.post('https://translate.api.cloud.yandex.net/translate/v2/translate',
+                             json=body,
+                             headers=headers
+                             )
+    return response.json()['translations'][0]['text']
+
+
+def main():
+    create_html_fail()
+    search_articles_titles()
+
+
+if __name__ == "__main__":
+    main()
